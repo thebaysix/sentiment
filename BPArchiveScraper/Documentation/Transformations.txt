@@ -1,0 +1,9 @@
+Sanitization transformations:
+
+&lsquo; -> '
+&rsquo; -> '
+&#39; -> '
+&ldquo; -> "
+&rdquo; -> "
+&nbsp -> <REMOVE>
+&mdash; -> - OR MAYBE ", "

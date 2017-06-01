@@ -4,8 +4,12 @@
 
 # Nuget packages #
 ###################
-\
 \BPArchiveScraper\packages\*
+
+# binaries and objects #
+###################
+\BPArchiveScraper\bin\*
+\BPArchiveScraper\obj\*
 
 # Scraped Files (output) #
 ##########################

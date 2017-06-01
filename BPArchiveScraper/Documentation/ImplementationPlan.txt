@@ -1,0 +1,5 @@
+BPArchiveScraper
+
+1. Build a basic scraper that extracts the main text article part given a url
+1a. Ignores images, links, "archive is now free" message
+2. Parse metadata about the article (Date published)
