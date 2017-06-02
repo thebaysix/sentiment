@@ -10,17 +10,26 @@ using HtmlAgilityPack;
 
 namespace BPArchiveScraper
 {
+    enum Mode
+    {
+        Metadata = 0,
+        Sentiment = 1,
+    }
+
     class Scraper
     {
         // If offline, skip the download step
         public static bool _isOffline = false;
 
+        // Depending on the mode, construct a corresponding summary file
+        public static Mode _scraperMode = Mode.Metadata;
+
         // 2010 (9901 - 12658)
         public static int _articleIdStart = 9901;
-        public static int _articleIdEnd = 10000;
+        public static int _articleIdEnd = 12658;
 
         // BP id of article to analyze
-        // Ids tested: 11839 - 11849
+        // Ids tested: 9901 - 10000, 11839 - 11849
 
         static void Main(string[] args)
         {
@@ -29,7 +38,10 @@ namespace BPArchiveScraper
 
             // Build the article map
             for (int i = _articleIdStart; i <= _articleIdEnd; i++)
-                idToArticleMap.Add(i, GetArticleInfo(i));
+            {
+                Console.WriteLine(i);
+                idToArticleMap.Add(i, GetArticleInfo(i, _scraperMode));
+            }
 
             // Use the idToArticleMap to output a summary to a .csv file
 
@@ -40,23 +52,50 @@ namespace BPArchiveScraper
             // Create the summary file.
             using (FileStream fs = File.Create(GetFullCsvFilePath()))
             {
-                // Write the metadata to .csv
-                var csvFormat = "{0},{1},{2},{3},{4}\n";
-
                 // Write the header
-                var headerLine = String.Format(csvFormat, "", "Date", "Title", "Author", "Sentiment");
-                byte[] headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
-                fs.Write(headerInfo, 0, headerInfo.Length);
+                string csvFormat, headerLine;
+                byte[] headerInfo;
+                switch (_scraperMode)
+                {
+                    case Mode.Metadata:
+                        csvFormat = "{0},{1},{2},{3}\n";
+                        headerLine = String.Format(csvFormat, "Id", "Date", "Title", "Author");
+                        headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
+                        fs.Write(headerInfo, 0, headerInfo.Length);
+                        break;
+                    case Mode.Sentiment:
+                        csvFormat = "{0},{1}\n";
+                        headerLine = String.Format(csvFormat, "Id", "Sentiment");
+                        headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
+                        fs.Write(headerInfo, 0, headerInfo.Length);
+                        break;
+                    default:
+                        Console.WriteLine("Unexpected execution mode.");
+                        return;
+                }
 
+                // Write the body
                 foreach (var kvp in idToArticleMap)
                 {
-                    // Write the body
                     Dictionary<string, string> articleMap;
-                    if (idToArticleMap.TryGetValue(kvp.Key, out articleMap) && articleMap.Values.Count == 5)
+                    if (idToArticleMap.TryGetValue(kvp.Key, out articleMap))
                     {
-                        var csvLine = String.Format(csvFormat, kvp.Key, articleMap["date"], articleMap["title"], articleMap["author"], articleMap["sentiment"]);
-                        byte[] info = new UTF8Encoding(true).GetBytes(csvLine);
-                        fs.Write(info, 0, info.Length);
+                        string bodyLine;
+                        switch (_scraperMode)
+                        {
+                            case Mode.Metadata:
+                                bodyLine = String.Format(csvFormat, kvp.Key, articleMap["date"], articleMap["title"], articleMap["author"]);
+                                break;
+                            case Mode.Sentiment:
+                                bodyLine = String.Format(csvFormat, kvp.Key, articleMap["sentiment"]);
+                                break;
+                            default:
+                                Console.WriteLine("Unexpected execution mode.");
+                                return;
+                        }
+
+                        byte[] bodyInfo = new UTF8Encoding(true).GetBytes(bodyLine);
+                        fs.Write(bodyInfo, 0, bodyInfo.Length);
                     }
                 }
             }
@@ -64,21 +103,24 @@ namespace BPArchiveScraper
             Console.WriteLine("EOP");
         }
 
-        static Dictionary<string, string> GetArticleInfo (int articleId)
+        static Dictionary<string, string> GetArticleInfo(int articleId, Mode mode)
         {
             var articleMap = new Dictionary<string, string>();
 
             // If we're offline, just assume that the txt file was already written to ScrapedFiles directory
-            if (!_isOffline)
+            if (!_isOffline && mode == Mode.Metadata)
             {
                 // Populate the following Keys: date, title, author, article
                 // And write the article to ScrapedFiles for sentiment analysis
                 articleMap = DownloadArticleAndParseMetadata(articleId);
             }
 
-            // Run StanfordNPS on the file, extract sentiment, add it to the map
-            var sentiment = ExecuteStanfordNPSOnFileAndExtractSentiment(articleId);
-            articleMap["sentiment"] = sentiment.ToString();
+            if (mode == Mode.Sentiment)
+            {
+                // Run StanfordNPS on the file, extract sentiment, add it to the map
+                var sentiment = ExecuteStanfordNPSOnFileAndExtractSentiment(articleId);
+                articleMap["sentiment"] = sentiment.ToString();
+            }
 
             return articleMap;
         }
