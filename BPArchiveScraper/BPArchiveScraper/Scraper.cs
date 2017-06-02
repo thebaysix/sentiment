@@ -21,6 +21,9 @@ namespace BPArchiveScraper
         // If offline, skip the download step
         public static bool _isOffline = false;
 
+        // Whether or not to download the articles into files
+        public static bool _downloadArticles = false;
+
         // Depending on the mode, construct a corresponding summary file
         public static Mode _scraperMode = Mode.Metadata;
 
@@ -46,11 +49,11 @@ namespace BPArchiveScraper
             // Use the idToArticleMap to output a summary to a .csv file
 
             // Don't overwrite the file if it exists.
-            if (File.Exists(GetFullCsvFilePath()))
+            if (File.Exists(GetFullCsvFilePath(_scraperMode, _articleIdStart, _articleIdEnd)))
                 return;
 
             // Create the summary file.
-            using (FileStream fs = File.Create(GetFullCsvFilePath()))
+            using (FileStream fs = File.Create(GetFullCsvFilePath(_scraperMode, _articleIdStart, _articleIdEnd)))
             {
                 // Write the header
                 string csvFormat, headerLine;
@@ -80,22 +83,27 @@ namespace BPArchiveScraper
                     Dictionary<string, string> articleMap;
                     if (idToArticleMap.TryGetValue(kvp.Key, out articleMap))
                     {
-                        string bodyLine;
+                        string bodyLine = String.Empty;
                         switch (_scraperMode)
                         {
                             case Mode.Metadata:
-                                bodyLine = String.Format(csvFormat, kvp.Key, articleMap["date"], articleMap["title"], articleMap["author"]);
+                                if (articleMap.ContainsKey("date") && articleMap.ContainsKey("title") && articleMap.ContainsKey("author"))
+                                    bodyLine = String.Format(csvFormat, kvp.Key, articleMap["date"], articleMap["title"], articleMap["author"]);
                                 break;
                             case Mode.Sentiment:
-                                bodyLine = String.Format(csvFormat, kvp.Key, articleMap["sentiment"]);
+                                if (articleMap.ContainsKey("sentiment"))
+                                    bodyLine = String.Format(csvFormat, kvp.Key, articleMap["sentiment"]);
                                 break;
                             default:
                                 Console.WriteLine("Unexpected execution mode.");
                                 return;
                         }
 
-                        byte[] bodyInfo = new UTF8Encoding(true).GetBytes(bodyLine);
-                        fs.Write(bodyInfo, 0, bodyInfo.Length);
+                        if (bodyLine != String.Empty)
+                        {
+                            byte[] bodyInfo = new UTF8Encoding(true).GetBytes(bodyLine);
+                            fs.Write(bodyInfo, 0, bodyInfo.Length);
+                        }
                     }
                 }
             }
@@ -206,17 +214,20 @@ namespace BPArchiveScraper
                     Console.WriteLine("Unexpected author node count: " + authorNodes.Count);
 
                 // Article region
-                var paragraphNodes = article.Descendants("p");
-                var articleString = "";
-                foreach (var paragraph in paragraphNodes)
+                if (_downloadArticles)
                 {
-                    var cleanText = MakeClean(paragraph.InnerText, cleanSubs);
-                    articleString += cleanText;
-                }
-                articleMap["article"] = articleString;
+                    var paragraphNodes = article.Descendants("p");
+                    var articleString = "";
+                    foreach (var paragraph in paragraphNodes)
+                    {
+                        var cleanText = MakeClean(paragraph.InnerText, cleanSubs);
+                        articleString += cleanText;
+                    }
+                    articleMap["article"] = articleString;
 
-                // Write the article to a file and keep track of the metadata
-                System.IO.File.WriteAllLines(GetFullFilePath(articleId), new string[] { articleMap["article"] });
+                    // Write the article to a file and keep track of the metadata
+                    System.IO.File.WriteAllLines(GetFullFilePath(articleId), new string[] { articleMap["article"] });
+                }
             }
             else
             {
@@ -231,9 +242,23 @@ namespace BPArchiveScraper
             return @"C:\Code\Sentiment\" + (isStanfordNLPFile ? @"StanfordCoreNLP\" : @"ScrapedFiles\") + articleId + ".txt" + (isXml ? ".xml" : "");
         }
 
-        static string GetFullCsvFilePath()
+        static string GetFullCsvFilePath(Mode mode, int startId, int endId)
         {
-            return @"C:\Code\Sentiment\ScrapedFiles\Summary\SENTIMENTSUMMARY.csv";
+            string fileName;
+            switch (mode)
+            {
+                case Mode.Metadata:
+                    fileName = "METADATASUMMARY";
+                    break;
+                case Mode.Sentiment:
+                    fileName = "SENTIMENTSUMMARY";
+                    break;
+                default:
+                    Console.WriteLine("Unexpected execution mode.");
+                    fileName = "UNKNOWNSUMMARY";
+                    break;
+            }
+            return @"C:\Code\Sentiment\ScrapedFiles\Summary\" + fileName + "_" + startId + "_" + endId +  ".csv";
         }
 
         /// <summary>
