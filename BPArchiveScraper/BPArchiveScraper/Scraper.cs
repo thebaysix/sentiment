@@ -25,10 +25,10 @@ namespace BPArchiveScraper
         public static bool _downloadArticles = false;
 
         // Depending on the mode, construct a corresponding summary file
-        public static Mode _scraperMode = Mode.Metadata;
+        public static Mode _scraperMode = Mode.Sentiment;
 
         // 2010 (9901 - 12658)
-        public static int _articleIdStart = 9901;
+        public static int _articleIdStart = 9921;
         public static int _articleIdEnd = 12658;
 
         // BP id of article to analyze
@@ -317,10 +317,6 @@ namespace BPArchiveScraper
             var targetFilePath = GetFullFilePath(articleId, isXml: true);
             MoveFile(sourceFilePath, targetFilePath);
 
-            // Wait for the file to exist (TODO: make MoveFile async and replace this with await Task)
-            //while (!File.Exists(targetFilePath))
-            //    Thread.Sleep(100); // Still doesn't exist? Wait 0.1s and try again.
-
             XmlDocument sentimentXmlDoc;
 
             try
@@ -380,25 +376,24 @@ namespace BPArchiveScraper
         {
             try
             {
-                // create the ProcessStartInfo using "cmd" as the program to be run,
-                // and "/c " as the parameters.
-                // Incidentally, /c tells cmd that we want it to execute the command that follows,
-                // and then exit.
+                // create the ProcessStartInfo using "cmd" as the program to be run, and "/c " as the parameters.
+                // Incidentally, /c tells cmd that we want it to execute the command that follows, and then exit.
                 System.Diagnostics.ProcessStartInfo procStartInfo = new System.Diagnostics.ProcessStartInfo("cmd", "/c " + command);
                 procStartInfo.WorkingDirectory = workingDirectory;
 
                 // The following commands are needed to redirect the standard output.
                 // This means that it will be redirected to the Process.StandardOutput StreamReader.
                 procStartInfo.RedirectStandardOutput = true;
-                procStartInfo.UseShellExecute = false;
-                // Do not create the black window.
-                procStartInfo.CreateNoWindow = false;
+                procStartInfo.UseShellExecute = false; // Necessary to redirect I/O streams
+                procStartInfo.CreateNoWindow = false; // Do not create the black window.
+
                 // Now we create a process, assign its ProcessStartInfo and start it (synchronously)
                 System.Diagnostics.Process proc = new System.Diagnostics.Process();
                 proc.StartInfo = procStartInfo;
                 proc.Start();
 
-                // The process completed
+                // Wait for the process to exit
+                proc.WaitForExit();
             }
             catch (Exception objException)
             {
