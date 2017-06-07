@@ -28,11 +28,11 @@ namespace BPArchiveScraper
         public static Mode _scraperMode = Mode.Sentiment;
 
         // 2010 (9901 - 12658)
-        public static int _articleIdStart = 9921;
+        public static int _articleIdStart = 10752;
         public static int _articleIdEnd = 12658;
 
         // BP id of article to analyze
-        // Ids tested: 9901 - 10000, 11839 - 11849
+        // Ids tested: 9901 - 10751, 11839 - 11849
 
         static void Main(string[] args)
         {
@@ -223,10 +223,9 @@ namespace BPArchiveScraper
                         var cleanText = MakeClean(paragraph.InnerText, cleanSubs);
                         articleString += cleanText;
                     }
-                    articleMap["article"] = articleString;
-
+                    
                     // Write the article to a file and keep track of the metadata
-                    System.IO.File.WriteAllLines(GetFullFilePath(articleId), new string[] { articleMap["article"] });
+                    System.IO.File.WriteAllLines(GetFullFilePath(articleId), new string[] { articleString });
                 }
             }
             else
