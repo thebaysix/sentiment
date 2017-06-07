@@ -31,6 +31,9 @@ namespace BPArchiveScraper
         public static int _articleIdStart = 10752;
         public static int _articleIdEnd = 12658;
 
+        public const double SENTIMENT_ERROR_DOUBLE = -1.0;
+        public const string SENTIMENT_ERROR_STRING = "-1";
+
         // BP id of article to analyze
         // Ids tested: 9901 - 10751, 11839 - 11849
 
@@ -81,18 +84,21 @@ namespace BPArchiveScraper
                 foreach (var kvp in idToArticleMap)
                 {
                     Dictionary<string, string> articleMap;
-                    if (idToArticleMap.TryGetValue(kvp.Key, out articleMap))
+                    int id = kvp.Key;
+                    if (idToArticleMap.TryGetValue(id, out articleMap))
                     {
                         string bodyLine = String.Empty;
                         switch (_scraperMode)
                         {
                             case Mode.Metadata:
-                                if (articleMap.ContainsKey("date") && articleMap.ContainsKey("title") && articleMap.ContainsKey("author"))
-                                    bodyLine = String.Format(csvFormat, kvp.Key, articleMap["date"], articleMap["title"], articleMap["author"]);
+                                string date, title, author;
+                                if (articleMap.TryGetValue("date", out date) && articleMap.TryGetValue("title", out title) && articleMap.TryGetValue("author", out author))
+                                    bodyLine = String.Format(csvFormat, id, date, title, author);
                                 break;
                             case Mode.Sentiment:
-                                if (articleMap.ContainsKey("sentiment"))
-                                    bodyLine = String.Format(csvFormat, kvp.Key, articleMap["sentiment"]);
+                                string sentiment;
+                                if (articleMap.TryGetValue("sentiment", out sentiment) && sentiment != SENTIMENT_ERROR_STRING)
+                                    bodyLine = String.Format(csvFormat, id, sentiment);
                                 break;
                             default:
                                 Console.WriteLine("Unexpected execution mode.");
@@ -230,7 +236,7 @@ namespace BPArchiveScraper
             }
             else
             {
-                Console.WriteLine("Unexpected article node count: " + articleNodes?.Count ?? "-1");
+                Console.WriteLine("Unexpected article node count: " + articleNodes?.Count ?? "null");
             }
 
             return articleMap;
@@ -327,7 +333,7 @@ namespace BPArchiveScraper
             catch (XmlException e)
             {
                 Console.WriteLine(e.Message);
-                return -1.0;
+                return SENTIMENT_ERROR_DOUBLE;
             }
 
 
