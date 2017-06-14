@@ -12,30 +12,28 @@ namespace BPArchiveScraper
 {
     enum Mode
     {
-        Metadata = 0,
-        Sentiment = 1,
+        OfflineMetadataOnly = 0,
+        AllMetadata = 1,
+        Sentiment = 2,
     }
 
     class Scraper
     {
-        // If offline, skip the download step
-        public static bool _isOffline = false;
-
         // Whether or not to download the articles into files
         public static bool _downloadArticles = false;
 
         // Depending on the mode, construct a corresponding summary file
-        public static Mode _scraperMode = Mode.Sentiment;
+        public static Mode _scraperMode = Mode.OfflineMetadataOnly;
 
         // 2010 (9901 - 12658)
-        public static int _articleIdStart = 10752;
+        public static int _articleIdStart = 9901;
         public static int _articleIdEnd = 12658;
 
         public const double SENTIMENT_ERROR_DOUBLE = -1.0;
         public const string SENTIMENT_ERROR_STRING = "-1";
 
         // BP id of article to analyze
-        // Ids tested: 9901 - 10751, 11839 - 11849
+        // Ids tested: 9901 - 11547, 11839 - 11849
 
         static void Main(string[] args)
         {
@@ -63,9 +61,15 @@ namespace BPArchiveScraper
                 byte[] headerInfo;
                 switch (_scraperMode)
                 {
-                    case Mode.Metadata:
-                        csvFormat = "{0},{1},{2},{3}\n";
-                        headerLine = String.Format(csvFormat, "Id", "Date", "Title", "Author");
+                    case Mode.OfflineMetadataOnly:
+                        csvFormat = "{0},{1}\n";
+                        headerLine = String.Format(csvFormat, "Id", "Length");
+                        headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
+                        fs.Write(headerInfo, 0, headerInfo.Length);
+                        break;
+                    case Mode.AllMetadata:
+                        csvFormat = "{0},{1},{2},{3},{4}\n";
+                        headerLine = String.Format(csvFormat, "Id", "Date", "Title", "Author", "Length");
                         headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
                         fs.Write(headerInfo, 0, headerInfo.Length);
                         break;
@@ -87,16 +91,19 @@ namespace BPArchiveScraper
                     int id = kvp.Key;
                     if (idToArticleMap.TryGetValue(id, out articleMap))
                     {
+                        string date, title, author, length, sentiment;
                         string bodyLine = String.Empty;
                         switch (_scraperMode)
                         {
-                            case Mode.Metadata:
-                                string date, title, author;
-                                if (articleMap.TryGetValue("date", out date) && articleMap.TryGetValue("title", out title) && articleMap.TryGetValue("author", out author))
-                                    bodyLine = String.Format(csvFormat, id, date, title, author);
+                            case Mode.OfflineMetadataOnly:
+                                if (articleMap.TryGetValue("length", out length))
+                                    bodyLine = String.Format(csvFormat, id, length);
+                                break;
+                            case Mode.AllMetadata:
+                                if (articleMap.TryGetValue("date", out date) && articleMap.TryGetValue("title", out title) && articleMap.TryGetValue("author", out author) && articleMap.TryGetValue("length", out length))
+                                    bodyLine = String.Format(csvFormat, id, date, title, author, length);
                                 break;
                             case Mode.Sentiment:
-                                string sentiment;
                                 if (articleMap.TryGetValue("sentiment", out sentiment) && sentiment != SENTIMENT_ERROR_STRING)
                                     bodyLine = String.Format(csvFormat, id, sentiment);
                                 break;
@@ -121,12 +128,18 @@ namespace BPArchiveScraper
         {
             var articleMap = new Dictionary<string, string>();
 
-            // If we're offline, just assume that the txt file was already written to ScrapedFiles directory
-            if (!_isOffline && mode == Mode.Metadata)
+            // If we're offline, just assume that the txt file was already written to ScrapedFiles directory (skip this section)
+            if (mode == Mode.AllMetadata)
             {
                 // Populate the following Keys: date, title, author, article
                 // And write the article to ScrapedFiles for sentiment analysis
                 articleMap = DownloadArticleAndParseMetadata(articleId);
+            }
+
+            if (mode == Mode.OfflineMetadataOnly || mode == Mode.AllMetadata)
+            {
+                // Get the length of the article that was written to the ScrapedFiles directory as a .txt
+                articleMap["length"] = GetArticleLength(articleId).ToString();
             }
 
             if (mode == Mode.Sentiment)
@@ -220,16 +233,16 @@ namespace BPArchiveScraper
                     Console.WriteLine("Unexpected author node count: " + authorNodes.Count);
 
                 // Article region
+                var paragraphNodes = article.Descendants("p");
+                var articleString = "";
+                foreach (var paragraph in paragraphNodes)
+                {
+                    var cleanText = MakeClean(paragraph.InnerText, cleanSubs);
+                    articleString += cleanText;
+                }
+
                 if (_downloadArticles)
                 {
-                    var paragraphNodes = article.Descendants("p");
-                    var articleString = "";
-                    foreach (var paragraph in paragraphNodes)
-                    {
-                        var cleanText = MakeClean(paragraph.InnerText, cleanSubs);
-                        articleString += cleanText;
-                    }
-                    
                     // Write the article to a file and keep track of the metadata
                     System.IO.File.WriteAllLines(GetFullFilePath(articleId), new string[] { articleString });
                 }
@@ -252,7 +265,10 @@ namespace BPArchiveScraper
             string fileName;
             switch (mode)
             {
-                case Mode.Metadata:
+                case Mode.OfflineMetadataOnly:
+                    fileName = "OFFLINEMETADATASUMMARY";
+                    break;
+                case Mode.AllMetadata:
                     fileName = "METADATASUMMARY";
                     break;
                 case Mode.Sentiment:
@@ -339,6 +355,25 @@ namespace BPArchiveScraper
 
             // Extract the sentiment from the StandformNPS XML output
             return GetSentiment(sentimentXmlDoc);
+        }
+
+        static int GetArticleLength(int articleId)
+        {
+            var path = GetFullFilePath(articleId);
+
+            if (File.Exists(path))
+            {
+                string article;
+                var fileStream = new FileStream(path, FileMode.Open, FileAccess.Read);
+                using (var streamReader = new StreamReader(fileStream, Encoding.UTF8))
+                {
+                    article = streamReader.ReadToEnd();
+                }
+
+                return article != null ? article.Length : 0;
+            }
+
+            return 0;
         }
 
         /// <summary>
