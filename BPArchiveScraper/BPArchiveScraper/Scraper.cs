@@ -23,17 +23,14 @@ namespace BPArchiveScraper
         public static bool _downloadArticles = false;
 
         // Depending on the mode, construct a corresponding summary file
-        public static Mode _scraperMode = Mode.OfflineMetadataOnly;
+        public static Mode _scraperMode = Mode.Sentiment;
 
         // 2010 (9901 - 12658)
-        public static int _articleIdStart = 9901;
+        public static int _articleIdStart = 11753;
         public static int _articleIdEnd = 12658;
 
-        public const double SENTIMENT_ERROR_DOUBLE = -1.0;
+        public static readonly Tuple<double, int> SENTIMENT_ERROR_TUPLE = new Tuple<double, int>(-1.0, 0);
         public const string SENTIMENT_ERROR_STRING = "-1";
-
-        // BP id of article to analyze
-        // Ids tested: 9901 - 11547, 11839 - 11849
 
         static void Main(string[] args)
         {
@@ -74,8 +71,8 @@ namespace BPArchiveScraper
                         fs.Write(headerInfo, 0, headerInfo.Length);
                         break;
                     case Mode.Sentiment:
-                        csvFormat = "{0},{1}\n";
-                        headerLine = String.Format(csvFormat, "Id", "Sentiment");
+                        csvFormat = "{0},{1},{2}\n";
+                        headerLine = String.Format(csvFormat, "Id", "Sentiment", "Sentences");
                         headerInfo = new UTF8Encoding(true).GetBytes(headerLine);
                         fs.Write(headerInfo, 0, headerInfo.Length);
                         break;
@@ -91,7 +88,7 @@ namespace BPArchiveScraper
                     int id = kvp.Key;
                     if (idToArticleMap.TryGetValue(id, out articleMap))
                     {
-                        string date, title, author, length, sentiment;
+                        string date, title, author, length, sentimentTotal, sentences;
                         string bodyLine = String.Empty;
                         switch (_scraperMode)
                         {
@@ -104,8 +101,8 @@ namespace BPArchiveScraper
                                     bodyLine = String.Format(csvFormat, id, date, title, author, length);
                                 break;
                             case Mode.Sentiment:
-                                if (articleMap.TryGetValue("sentiment", out sentiment) && sentiment != SENTIMENT_ERROR_STRING)
-                                    bodyLine = String.Format(csvFormat, id, sentiment);
+                                if (articleMap.TryGetValue("sentimentTotal", out sentimentTotal) && sentimentTotal != SENTIMENT_ERROR_STRING && articleMap.TryGetValue("sentences", out sentences))
+                                    bodyLine = String.Format(csvFormat, id, sentimentTotal, sentences);
                                 break;
                             default:
                                 Console.WriteLine("Unexpected execution mode.");
@@ -146,7 +143,8 @@ namespace BPArchiveScraper
             {
                 // Run StanfordNPS on the file, extract sentiment, add it to the map
                 var sentiment = ExecuteStanfordNPSOnFileAndExtractSentiment(articleId);
-                articleMap["sentiment"] = sentiment.ToString();
+                articleMap["sentimentTotal"] = sentiment.Item1.ToString();
+                articleMap["sentences"] = sentiment.Item2.ToString();
             }
 
             return articleMap;
@@ -320,9 +318,9 @@ namespace BPArchiveScraper
         /// Construct the StanforNPS command to 
         /// </summary>
         /// <param name="filePath">FilePath to run NPS on</param>
-        /// <returns>The double representation of the sentiment value output by StanfordNPS on the given file. StanfordNPS evaluates each sentence,
-        /// and this function returns the average sentiment of those sentence. TODO: Weight sentences?</returns>
-        static double ExecuteStanfordNPSOnFileAndExtractSentiment(int articleId)
+        /// <returns>The Tuple(double,int) representation of the sentiment value output by StanfordNPS on the given file. StanfordNPS evaluates each sentence,
+        /// and this function returns the average sentiment of those sentence.</returns>
+        static Tuple<double, int> ExecuteStanfordNPSOnFileAndExtractSentiment(int articleId)
         {
             // Construct the StanfordNPS command
             var filePath = GetFullFilePath(articleId);
@@ -349,12 +347,12 @@ namespace BPArchiveScraper
             catch (XmlException e)
             {
                 Console.WriteLine(e.Message);
-                return SENTIMENT_ERROR_DOUBLE;
+                return SENTIMENT_ERROR_TUPLE;
             }
 
 
             // Extract the sentiment from the StandformNPS XML output
-            return GetSentiment(sentimentXmlDoc);
+            return GetSentimentTuple(sentimentXmlDoc);
         }
 
         static int GetArticleLength(int articleId)
@@ -377,11 +375,12 @@ namespace BPArchiveScraper
         }
 
         /// <summary>
-        /// Given output from nps, extract the sentiment value as an enum
+        /// Given output from nps, extract the total sentiment (sum of the sentiment for each sentence over all sentences)
+        /// and the number of sentences as a pair
         /// </summary>
         /// <param name="npsOutput">Output of StanfordNPS</param>
-        /// <returns>Double representation of the sentiment for this npsOutput</returns>
-        static double GetSentiment(XmlDocument xmlDoc)
+        /// <returns>Tuple representation of the sentiment for this npsOutput</returns>
+        static Tuple<double, int> GetSentimentTuple(XmlDocument xmlDoc)
         {
             // Iterate through all the sentences, adding the sentimentValues to a running total
             // Then return the average
@@ -403,7 +402,7 @@ namespace BPArchiveScraper
                     total += sentimentValue;
             }
 
-            return sentences.Count == 0 ? 0.0 : total / sentences.Count;
+            return new Tuple<double, int>(total, sentences.Count);
         }
 
         /// <span class="code-SummaryComment"><summary></span>
