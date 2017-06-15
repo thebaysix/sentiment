@@ -20,17 +20,23 @@ namespace BPArchiveScraper
     class Scraper
     {
         // Whether or not to download the articles into files
-        public static bool _downloadArticles = false;
+        public static readonly bool _downloadArticles = false;
 
         // Depending on the mode, construct a corresponding summary file
-        public static Mode _scraperMode = Mode.Sentiment;
+        public static readonly Mode _scraperMode = Mode.Sentiment;
+
+        // "Prospectus Hit List" excluded due to table format
+        // "Prospectus Q&A" excluded due to interview article style
+        public static readonly List<string> _titleBlacklist = new List<string>() { "Prospectus Hit List", "Prospectus Q&A" };
 
         // 2010 (9901 - 12658)
-        public static int _articleIdStart = 11753;
-        public static int _articleIdEnd = 12658;
+        // 2011 (12659 - 15756)
+        public const int _articleIdStart = 11753;
+        public const int _articleIdEnd = 12658;
 
-        public static readonly Tuple<double, int> SENTIMENT_ERROR_TUPLE = new Tuple<double, int>(-1.0, 0);
-        public const string SENTIMENT_ERROR_STRING = "-1";
+        // Error codes
+        public static readonly Tuple<double, int> _sentimentErrorTuple = new Tuple<double, int>(-1.0, 0);
+        public const string _sentimentErrorString = "-1";
 
         static void Main(string[] args)
         {
@@ -97,11 +103,17 @@ namespace BPArchiveScraper
                                     bodyLine = String.Format(csvFormat, id, length);
                                 break;
                             case Mode.AllMetadata:
-                                if (articleMap.TryGetValue("date", out date) && articleMap.TryGetValue("title", out title) && articleMap.TryGetValue("author", out author) && articleMap.TryGetValue("length", out length))
+                                if (articleMap.TryGetValue("date", out date) && 
+                                    articleMap.TryGetValue("title", out title) && 
+                                    !_titleBlacklist.Contains(title) &&
+                                    articleMap.TryGetValue("author", out author) && 
+                                    articleMap.TryGetValue("length", out length))
                                     bodyLine = String.Format(csvFormat, id, date, title, author, length);
                                 break;
                             case Mode.Sentiment:
-                                if (articleMap.TryGetValue("sentimentTotal", out sentimentTotal) && sentimentTotal != SENTIMENT_ERROR_STRING && articleMap.TryGetValue("sentences", out sentences))
+                                if (articleMap.TryGetValue("sentimentTotal", out sentimentTotal) && 
+                                    sentimentTotal != _sentimentErrorString && 
+                                    articleMap.TryGetValue("sentences", out sentences))
                                     bodyLine = String.Format(csvFormat, id, sentimentTotal, sentences);
                                 break;
                             default:
@@ -347,7 +359,7 @@ namespace BPArchiveScraper
             catch (XmlException e)
             {
                 Console.WriteLine(e.Message);
-                return SENTIMENT_ERROR_TUPLE;
+                return _sentimentErrorTuple;
             }
 
 
